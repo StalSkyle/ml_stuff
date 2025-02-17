@@ -2,28 +2,38 @@
 # you can download training data via opendatasets library
 
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import MultiLabelBinarizer
 
 train = pd.read_excel('tutors-lessons-prices-prediction/train.xlsx')
 test = pd.read_excel('tutors-lessons-prices-prediction/test.xlsx')
 submit = pd.read_csv('tutors-lessons-prices-prediction/sample_submit.csv')
 
-# sns.boxplot(train['mean_price'], width=0.4)
-# plt.show()
-
 pd.set_option('display.max_columns', None)
 
-# предмет - либо математика, либо информатика
+# FEATURE ENGINEERING
+
+'''
+кратко что сделано: кодирование нечисловых признаков - предмет, status, experience, categories, tutor_head_tags
+description и experience_des - либо есть либо нет
+дропнуты ненужные признаки
+предмет - либо математика, либо информатика
+образование, ученая степень и ученое звание - объеденено в educations, +1 за образование, +5 за степень, +3 за звание, -0.5, если нет описания образования
+ВОЗМОЖНЫЕ УЛУЧШЕНИЯ: 
+-миллиард колонок categories, можно разбить, например, на две - индивидуально/пара/группа, дошкольники/школьники/студенты
+-tutor_head_tags: поудаляй ненужные, ну или выдели в отдельную колонку special
+мб сделать образование, ученые степень и звание разными колонками
+можно распарсить год окончания, университет, пед/не пед, специальность и квалификацию
+сделать, чтобы прибавлялось в зависимости от звания
+УБРАТЬ ВЫБРОСЫ!11!!111!!111
+нормализовать/стандартизировать
+'''
+
 train = pd.get_dummies(train, columns=['предмет'])
 
-# уровень тьютора - аспирант, студент, частный препод и т д
 tmp = train['status'].str.get_dummies(sep=',')
 train = train.drop('status', axis=1)
 train = pd.concat([train, tmp], axis=1)
 
-# парсим опыт
 train['experience'] = train['experience'].str.replace(r"[^\d]", "", regex=True)
 train['experience'] = train['experience'].astype('float64')
 train['experience'] = train['experience'].fillna(0)
@@ -36,25 +46,53 @@ def strtolist(q):
     q[-1] = q[-1][:-1]
     return q
 
+
+# зачем fittransform, если можно getdummies - мб перепиши
 def parse_lists(data, column):
     data[column] = data[column].apply(strtolist)
     mlb = MultiLabelBinarizer()
     genres_encoded = mlb.fit_transform(data[column])
-    tmp = pd.DataFrame(genres_encoded, columns=mlb.classes_)
-    data = pd.concat([data, tmp], axis=1)
+    q = pd.DataFrame(genres_encoded, columns=mlb.classes_)
+    data = pd.concat([data, q], axis=1)
     data = data.drop(column, axis=1)
     return data
 
-# TODO: тут миллиард колонок, можно разбить, например, на две - индивидуально/пара/группа, дошкольники/школьники/студенты
-train = parse_lists(train, 'categories') # кем является
-# TODO: поудаляй ненужные, ну или выдели в special
-train = parse_lists(train, 'tutor_head_tags') # к чему готовит
-print(train[train[''] != 0])
-train = train.drop('', axis=1) # ничего не указал
 
-# удаляем ненужные столбцы; TODO: с description можно просто есть/нет
+train = parse_lists(train, 'categories')  # кем является
+
+train = parse_lists(train, 'tutor_head_tags')  # к чему готовит
+train = train.drop('', axis=1)  # ничего не указал, таких всего 5
+
+train['description'] = train['description'].apply(
+    lambda x: 0 if pd.isna(x) or isinstance(x,
+            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+train['experience_desc'] = train['experience_desc'].apply(
+    lambda x: 0 if pd.isna(x) or isinstance(x,
+            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+
 train = train.drop('Unnamed: 0', axis=1)
 train = train.drop('ФИО', axis=1)
 
+train['tutor_rating'] = train['tutor_rating'].fillna(0)
+
+train['educations'] = 0
+for i in range(1, 7):
+    train[f'Education_{i}'] = train[f'Education_{i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    train[f'Desc_Education_{i}'] = train[f'Desc_Education_{i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    train['educations'] += train[f'Education_{i}'] - 0.5 * (
+            (train[f'Desc_Education_{i}'] == 0) * (
+        train[f'Education_{i}']))
+    train = train.drop([f'Education_{i}'], axis=1)
+    train = train.drop([f'Desc_Education_{i}'], axis=1)
+
+for i in range(1, 3):  # something something dont repeat yourself
+    train[f'Ученое звание {i}'] = train[f'Ученое звание {i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    train['educations'] += 5 * train[f'Ученое звание {i}']
+    train[f'Ученая степень {i}'] = train[f'Ученая степень {i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    train['educations'] += 3 * train[f'Ученая степень {i}']
+
 print(train.info())
-print(train['GMAT (математическая часть)'].value_counts())
