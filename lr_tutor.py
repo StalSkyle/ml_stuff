@@ -3,6 +3,12 @@
 
 import pandas as pd
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 train = pd.read_excel('tutors-lessons-prices-prediction/train.xlsx')
 test = pd.read_excel('tutors-lessons-prices-prediction/test.xlsx')
@@ -27,6 +33,7 @@ description и experience_des - либо есть либо нет
 УБРАТЬ ВЫБРОСЫ!11!!111!!111
 нормализовать/стандартизировать
 '''
+
 
 train = pd.get_dummies(train, columns=['предмет'])
 
@@ -65,10 +72,10 @@ train = train.drop('', axis=1)  # ничего не указал, таких в�
 
 train['description'] = train['description'].apply(
     lambda x: 0 if pd.isna(x) or isinstance(x,
-            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+                                            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
 train['experience_desc'] = train['experience_desc'].apply(
     lambda x: 0 if pd.isna(x) or isinstance(x,
-            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+                                            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
 
 train = train.drop('Unnamed: 0', axis=1)
 train = train.drop('ФИО', axis=1)
@@ -94,5 +101,34 @@ for i in range(1, 3):  # something something dont repeat yourself
     train[f'Ученая степень {i}'] = train[f'Ученая степень {i}'].apply(
         lambda x: 0 if pd.isna(x) else 1)
     train['educations'] += 3 * train[f'Ученая степень {i}']
+    train = train.drop(f'Ученая степень {i}', axis=1)
+    train = train.drop(f'Ученое звание {i}', axis=1)
 
-print(train.info())
+# train = train[train['mean_price'] < 40]
+
+# ОБУЧЕНИЕ
+
+# sns.set_theme(rc = {'figure.figsize':(30, 30)})
+#
+# sns.heatmap(train.corr(), annot = False, cmap="YlGnBu", linecolor='white', linewidths=1)
+# plt.show()
+
+X = train.drop(columns=['mean_price'])
+Y = train['mean_price']
+
+# смотрим на оценки
+X_train, X_test, Y_train, Y_test =  train_test_split(X, Y, test_size = 0.2)
+
+lin_reg = LinearRegression()
+lin_reg.fit(X_train, Y_train)
+
+Y_pred = lin_reg.predict(X_test)
+
+print('Mean Absolute Error:', mean_absolute_error(Y_test, Y_pred))
+print('Mean Squared Error:', mean_squared_error(Y_test, Y_pred))
+print('R2 score:', r2_score(Y_test, Y_pred))
+
+
+# lin_reg = LinearRegression()
+# lin_reg.fit(X, Y)
+
