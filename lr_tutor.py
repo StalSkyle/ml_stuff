@@ -24,6 +24,7 @@ description и experience_des - либо есть либо нет
 дропнуты ненужные признаки
 предмет - либо математика, либо информатика
 образование, ученая степень и ученое звание - объеденено в educations, +1 за образование, +5 за степень, +3 за звание, -0.5, если нет описания образования
+
 ВОЗМОЖНЫЕ УЛУЧШЕНИЯ: 
 -миллиард колонок categories, можно разбить, например, на две - индивидуально/пара/группа, дошкольники/школьники/студенты
 -tutor_head_tags: поудаляй ненужные, ну или выдели в отдельную колонку special
@@ -32,6 +33,7 @@ description и experience_des - либо есть либо нет
 сделать, чтобы прибавлялось в зависимости от звания
 УБРАТЬ ВЫБРОСЫ!11!!111!!111
 нормализовать/стандартизировать
+убрать дубликаты
 '''
 
 
@@ -83,11 +85,15 @@ train = train.drop('ФИО', axis=1)
 train['tutor_rating'] = train['tutor_rating'].fillna(0)
 
 train['educations'] = 0
+
+def isnacheck(x):
+    return not(pd.isna(x))
+
 for i in range(1, 7):
     train[f'Education_{i}'] = train[f'Education_{i}'].apply(
-        lambda x: 0 if pd.isna(x) else 1)
+        isnacheck).astype(int)
     train[f'Desc_Education_{i}'] = train[f'Desc_Education_{i}'].apply(
-        lambda x: 0 if pd.isna(x) else 1)
+        isnacheck).astype(int)
     train['educations'] += train[f'Education_{i}'] - 0.5 * (
             (train[f'Desc_Education_{i}'] == 0) * (
         train[f'Education_{i}']))
@@ -96,15 +102,16 @@ for i in range(1, 7):
 
 for i in range(1, 3):  # something something dont repeat yourself
     train[f'Ученое звание {i}'] = train[f'Ученое звание {i}'].apply(
-        lambda x: 0 if pd.isna(x) else 1)
+        isnacheck).astype(int)
     train['educations'] += 5 * train[f'Ученое звание {i}']
     train[f'Ученая степень {i}'] = train[f'Ученая степень {i}'].apply(
-        lambda x: 0 if pd.isna(x) else 1)
+        isnacheck).astype(int)
     train['educations'] += 3 * train[f'Ученая степень {i}']
     train = train.drop(f'Ученая степень {i}', axis=1)
     train = train.drop(f'Ученое звание {i}', axis=1)
 
 # train = train[train['mean_price'] < 40]
+train = train.drop(['Взрослые кроме абитуриентов и студентов группа'], axis=1)
 
 # ОБУЧЕНИЕ
 
@@ -128,7 +135,84 @@ print('Mean Absolute Error:', mean_absolute_error(Y_test, Y_pred))
 print('Mean Squared Error:', mean_squared_error(Y_test, Y_pred))
 print('R2 score:', r2_score(Y_test, Y_pred))
 
+# обучаем на всём датасете
+lin_reg = LinearRegression()
+lin_reg.fit(X, Y)
 
-# lin_reg = LinearRegression()
-# lin_reg.fit(X, Y)
+# shameless ctrl+c; something something dont repeat yourself
 
+test = pd.get_dummies(test, columns=['предмет'])
+
+tmp = test['status'].str.get_dummies(sep=',')
+test = test.drop('status', axis=1)
+test = pd.concat([test, tmp], axis=1)
+
+test['experience'] = test['experience'].str.replace(r"[^\d]", "", regex=True)
+test['experience'] = test['experience'].astype('float64')
+test['experience'] = test['experience'].fillna(0)
+
+
+def strtolist(q):
+    q = q[1:-1]
+    q = q.split("', '")
+    q[0] = q[0][1:]
+    q[-1] = q[-1][:-1]
+    return q
+
+
+# зачем fittransform, если можно getdummies - мб перепиши
+def parse_lists(data, column):
+    data[column] = data[column].apply(strtolist)
+    mlb = MultiLabelBinarizer()
+    genres_encoded = mlb.fit_transform(data[column])
+    q = pd.DataFrame(genres_encoded, columns=mlb.classes_)
+    data = pd.concat([data, q], axis=1)
+    data = data.drop(column, axis=1)
+    return data
+
+
+test = parse_lists(test, 'categories')  # кем является
+
+test = parse_lists(test, 'tutor_head_tags')  # к чему готовит
+test = test.drop('', axis=1)  # ничего не указал, таких всего 5
+
+test['description'] = test['description'].apply(
+    lambda x: 0 if pd.isna(x) or isinstance(x,
+                                            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+test['experience_desc'] = test['experience_desc'].apply(
+    lambda x: 0 if pd.isna(x) or isinstance(x,
+                                            str) and 'Репетитор не предоставил о себе дополнительных сведений' in x else 1)
+
+test = test.drop('Unnamed: 0', axis=1)
+test = test.drop('ФИО', axis=1)
+
+test['tutor_rating'] = test['tutor_rating'].fillna(0)
+
+test['educations'] = 0
+for i in range(1, 7):
+    test[f'Education_{i}'] = test[f'Education_{i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    test[f'Desc_Education_{i}'] = test[f'Desc_Education_{i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    test['educations'] += test[f'Education_{i}'] - 0.5 * (
+            (test[f'Desc_Education_{i}'] == 0) * (
+        test[f'Education_{i}']))
+    test = test.drop([f'Education_{i}'], axis=1)
+    test = test.drop([f'Desc_Education_{i}'], axis=1)
+
+for i in range(1, 3):  # something something dont repeat yourself
+    test[f'Ученое звание {i}'] = test[f'Ученое звание {i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    test['educations'] += 5 * test[f'Ученое звание {i}']
+    test[f'Ученая степень {i}'] = test[f'Ученая степень {i}'].apply(
+        lambda x: 0 if pd.isna(x) else 1)
+    test['educations'] += 3 * test[f'Ученая степень {i}']
+    test = test.drop(f'Ученая степень {i}', axis=1)
+    test = test.drop(f'Ученое звание {i}', axis=1)
+
+test = test[X.columns]
+
+# y_test = lin_reg.predict(test)
+# submition = pd.DataFrame(y_test, columns=['mean_price'])
+# submition = submition.reset_index()
+# submition.to_csv('first_try_lets_go.csv', index=False)
