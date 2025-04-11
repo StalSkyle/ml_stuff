@@ -1,3 +1,7 @@
 .idea/
+<<<<<<< HEAD
 tutors-lessons-prices-prediction/
 *.csv
+=======
+data/
+>>>>>>> 549a90c36ce016621508075daa716a0d7fbca2a5
