@@ -36,10 +36,7 @@ class Neuron(object):
         self.TrainRaito = 1
 
     def activation_function(self, InputData):
-        if (InputData > np.zeros(InputData.shape)).all():
-            return 1
-        else:
-            return -1
+        return 1 if InputData > 0 else -1
 
     def feed_forward(self, InputData):
         return self.activation_function(
@@ -65,7 +62,6 @@ dataset1 = SemicircleGenerator([0, 0], [4, 6], "+")
 dataset2 = SemicircleGenerator([7, -2], [4, 6], "-")
 testdata_x, testdata_y = [], []
 
-# переписать бы на while
 for data in dataset1.gen_semicircle_data(1000):
     neural.train_one_step(np.array([data]), 1)
     testdata_x.append(data[0])
@@ -77,7 +73,7 @@ for data in dataset2.gen_semicircle_data(1000):
 
 x_data, y_data = [-6, 13], []
 
-for i in x_data: # выразили y
+for i in x_data:  # выразили y
     y_data.append(- (neural.Weight[0][0] + i *
                      neural.Weight[1][0]) / (neural.Weight[2][0]))
 
